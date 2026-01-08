@@ -6,7 +6,7 @@
     <title>NWA Grid Dashboard</title>
     
     <!-- Bootstrap 5 CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- Bootstrap Icons -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
     <!-- OpenLayers CSS -->
@@ -16,7 +16,9 @@
 </head>
 <body>
     <!-- Audio Player (hidden) -->
-    <audio id="musicplayer" src="quack.mp3" preload="auto"></audio>
+    <audio id="musicplayer">
+        <source src="quack.mp3" type="audio/mpeg">
+    </audio>
     
     <!-- Header -->
     <header class="dashboard-header">
@@ -36,7 +38,7 @@
                         <span class="badge status-badge" id="statusBadge">
                             <i class="bi bi-circle-fill pulse"></i> LIVE
                         </span>
-                        <span class="utc-clock" id="utcClock">00:00:00 UTC</span>
+                        <span class="central-clock" id="centralClock">12:00:00 AM CT</span>
                     </div>
                 </div>
                 <div class="col-auto">
@@ -60,7 +62,12 @@
         <section class="grid-panel weather-panel" id="weatherPanel">
             <div class="panel-header">
                 <h3><i class="bi bi-thermometer-half"></i> Local Weather</h3>
-                <span class="panel-location">Springdale, AR (KASG)</span>
+                <div class="panel-header-right">
+                    <span class="panel-location">Springdale, AR (KASG)</span>
+                    <a href="https://forecast.weather.gov/MapClick.php?lat=36.06487500000003&lon=-94.16178999999994" target="_blank" class="external-link" title="Open NWS Forecast">
+                        <i class="bi bi-box-arrow-up-right"></i>
+                    </a>
+                </div>
             </div>
             <div class="panel-content">
                 <div class="weather-display">
@@ -109,9 +116,9 @@
                             <span class="detail-value" id="wxWindDir">--</span>
                         </div>
                         <div class="wx-detail">
-                            <i class="bi bi-cloud-fill"></i>
-                            <span class="detail-label">Ceiling</span>
-                            <span class="detail-value" id="wxCeiling">-- ft</span>
+                            <i class="bi bi-thermometer-snow"></i>
+                            <span class="detail-label">Dew Depression</span>
+                            <span class="detail-value" id="wxDewDepression">--°F</span>
                         </div>
                     </div>
                 </div>
@@ -127,38 +134,50 @@
         <section class="grid-panel incidents-panel" id="incidentsPanel">
             <div class="panel-header">
                 <h3><i class="bi bi-exclamation-triangle-fill"></i> iDriveArkansas Incidents</h3>
-                <div class="panel-controls">
+                <div class="panel-header-right">
+                    <a href="https://www.idrivearkansas.com/" target="_blank" class="external-link" title="Open iDriveArkansas">
+                        <i class="bi bi-box-arrow-up-right"></i>
+                    </a>
+                </div>
+            </div>
+            <div class="panel-content">
+                <div class="panel-controls-row">
                     <label class="form-check form-check-inline">
-                        <input class="form-check-input" type="checkbox" id="bridgeCheck">
-                        <span class="form-check-label">Hide Bridges</span>
+                        <input class="form-check-input" type="checkbox" id="bridgeCheck" checked>
+                        <span class="form-check-label">Ignore bridges, construction, maintenance</span>
                     </label>
                     <button class="btn btn-sm btn-outline-neon" id="refreshIncidents">
-                        <i class="bi bi-arrow-clockwise"></i>
+                        <i class="bi bi-arrow-clockwise"></i> Refresh
                     </button>
                     <button class="btn btn-sm btn-outline-warning" id="clearIgnored">
                         Clear Ignored
                     </button>
+                    <label class="form-check form-check-inline">
+                        <input class="form-check-input" type="checkbox" id="autoPlayCheck">
+                        <span class="form-check-label">Play sound</span>
+                    </label>
                 </div>
-            </div>
-            <div class="panel-content">
                 <div class="incidents-count">
                     <span class="count-badge" id="incidentCount">0</span>
                     <span>Active Incidents</span>
                 </div>
                 <div class="table-responsive">
-                    <table class="table table-dark table-striped table-hover" id="eventTable">
+                    <table class="table table-bordered table-dark table-striped table-hover" id="eventTable">
                         <thead>
                             <tr>
+                                <th>Ignore</th>
+                                <th>County</th>
                                 <th>Type</th>
+                                <th>Route</th>
                                 <th>Description</th>
-                                <th>Location</th>
-                                <th>Distance</th>
-                                <th>Actions</th>
+                                <th>Lanes</th>
+                                <th>Nearest Cam</th>
+                                <th>Map</th>
                             </tr>
                         </thead>
                         <tbody id="incidentTableBody">
                             <tr>
-                                <td colspan="5" class="text-center">Loading incidents...</td>
+                                <td colspan="8" class="text-center">Loading incidents...</td>
                             </tr>
                         </tbody>
                     </table>
@@ -170,6 +189,11 @@
         <section class="grid-panel map-panel" id="mapPanel">
             <div class="panel-header">
                 <h3><i class="bi bi-map-fill"></i> Incidents Map</h3>
+                <div class="panel-header-right">
+                    <a href="https://www.idrivearkansas.com/map" target="_blank" class="external-link" title="Open Full Map">
+                        <i class="bi bi-box-arrow-up-right"></i>
+                    </a>
+                </div>
             </div>
             <div class="panel-content">
                 <div id="incidentMap" class="map-container"></div>
@@ -179,9 +203,11 @@
         <section class="grid-panel adsb-panel" id="adsbPanel">
             <div class="panel-header">
                 <h3><i class="bi bi-airplane-fill"></i> ADS-B Plane Tracker</h3>
-                <a href="https://globe.adsbexchange.com/?lat=36.1&lon=-94.1&zoom=9" target="_blank" class="external-link">
-                    <i class="bi bi-box-arrow-up-right"></i>
-                </a>
+                <div class="panel-header-right">
+                    <a href="https://globe.adsbexchange.com/?lat=36.1&lon=-94.1&zoom=9" target="_blank" class="external-link" title="Open ADS-B Exchange">
+                        <i class="bi bi-box-arrow-up-right"></i>
+                    </a>
+                </div>
             </div>
             <div class="panel-content iframe-container">
                 <iframe 
@@ -200,6 +226,12 @@
                 <div class="panel-tabs">
                     <button class="tab-btn active" data-tab="nws">NWS</button>
                     <button class="tab-btn" data-tab="cod">COD</button>
+                    <button class="tab-btn" data-tab="pivotal">Pivotal</button>
+                </div>
+                <div class="panel-header-right">
+                    <a href="https://radar.weather.gov/" target="_blank" class="external-link" title="Open NWS Radar">
+                        <i class="bi bi-box-arrow-up-right"></i>
+                    </a>
                 </div>
             </div>
             <div class="panel-content">
@@ -213,17 +245,69 @@
                         loading="lazy">
                     </iframe>
                 </div>
+                <div class="tab-content" id="pivotal-tab">
+                    <iframe 
+                        src="https://home.pivotalweather.com/"
+                        title="Pivotal Weather"
+                        loading="lazy">
+                    </iframe>
+                </div>
             </div>
         </section>
 
-        <!-- Row 4: Soundings/Models + Tools -->
+        <!-- Row 4: Severe Weather -->
+        <section class="grid-panel severe-panel" id="severePanel">
+            <div class="panel-header">
+                <h3><i class="bi bi-lightning-fill"></i> Severe Weather</h3>
+                <div class="panel-tabs">
+                    <button class="tab-btn active" data-tab="spc">SPC</button>
+                    <button class="tab-btn" data-tab="nhc">NHC</button>
+                    <button class="tab-btn" data-tab="nadocast">Nadocast</button>
+                </div>
+                <div class="panel-header-right">
+                    <a href="https://www.spc.noaa.gov/" target="_blank" class="external-link" title="Open SPC">
+                        <i class="bi bi-box-arrow-up-right"></i>
+                    </a>
+                </div>
+            </div>
+            <div class="panel-content">
+                <div class="tab-content active" id="spc-tab">
+                    <iframe 
+                        src="https://www.spc.noaa.gov/classic.html"
+                        title="SPC Products"
+                        loading="lazy">
+                    </iframe>
+                </div>
+                <div class="tab-content" id="nhc-tab">
+                    <iframe 
+                        src="https://www.nhc.noaa.gov/"
+                        title="National Hurricane Center"
+                        loading="lazy">
+                    </iframe>
+                </div>
+                <div class="tab-content" id="nadocast-tab">
+                    <iframe 
+                        src="https://data.nadocast.com/viewer.html"
+                        title="Nadocast"
+                        loading="lazy">
+                    </iframe>
+                </div>
+            </div>
+        </section>
+
+        <!-- Row 5: Soundings/Models -->
         <section class="grid-panel models-panel" id="modelsPanel">
             <div class="panel-header">
                 <h3><i class="bi bi-graph-up"></i> Soundings & Models</h3>
                 <div class="panel-tabs">
                     <button class="tab-btn active" data-tab="soundings">Soundings</button>
-                    <button class="tab-btn" data-tab="models">Models</button>
-                    <button class="tab-btn" data-tab="spc">SPC</button>
+                    <button class="tab-btn" data-tab="models">COD Models</button>
+                    <button class="tab-btn" data-tab="pivotalmodels">Pivotal Models</button>
+                </div>
+                <div class="panel-header-right">
+                    <a href="https://weather.cod.edu/forecast/" target="_blank" class="external-link" title="Open COD Models">
+                        <i class="bi bi-box-arrow-up-right"></i>
+                    </a>
                 </div>
             </div>
             <div class="panel-content">
@@ -241,16 +325,54 @@
                         loading="lazy">
                     </iframe>
                 </div>
-                <div class="tab-content" id="spc-tab">
+                <div class="tab-content" id="pivotalmodels-tab">
                     <iframe 
-                        src="https://www.spc.noaa.gov/classic.html"
-                        title="SPC Products"
+                        src="https://www.pivotalweather.com/model.php"
+                        title="Pivotal Weather Models"
                         loading="lazy">
                     </iframe>
                 </div>
             </div>
         </section>
 
+        <!-- Row 6: NWS & Storm Streams -->
+        <section class="grid-panel nws-panel" id="nwsPanel">
+            <div class="panel-header">
+                <h3><i class="bi bi-cloud-sun"></i> NWS Tulsa</h3>
+                <div class="panel-header-right">
+                    <a href="https://www.weather.gov/tsa/" target="_blank" class="external-link" title="Open NWS Tulsa">
+                        <i class="bi bi-box-arrow-up-right"></i>
+                    </a>
+                </div>
+            </div>
+            <div class="panel-content iframe-container">
+                <iframe 
+                    src="https://www.weather.gov/tsa/"
+                    title="NWS Tulsa"
+                    loading="lazy">
+                </iframe>
+            </div>
+        </section>
+
+        <section class="grid-panel streams-panel" id="streamsPanel">
+            <div class="panel-header">
+                <h3><i class="bi bi-broadcast"></i> Storm Streams</h3>
+                <div class="panel-header-right">
+                    <a href="https://livestormchasing.com/" target="_blank" class="external-link" title="Open Storm Streams">
+                        <i class="bi bi-box-arrow-up-right"></i>
+                    </a>
+                </div>
+            </div>
+            <div class="panel-content iframe-container">
+                <iframe 
+                    src="https://livestormchasing.com/"
+                    title="Storm Streams"
+                    loading="lazy">
+                </iframe>
+            </div>
+        </section>
+
+        <!-- Quick Links Panel -->
         <section class="grid-panel tools-panel" id="toolsPanel">
             <div class="panel-header">
                 <h3><i class="bi bi-tools"></i> Quick Links</h3>
@@ -269,7 +391,7 @@
                         <i class="bi bi-cloud-sun"></i>
                         <span>NWS Tulsa</span>
                     </a>
-                    <a href="https://www.nadocast.com/" target="_blank" class="quick-link">
+                    <a href="https://data.nadocast.com/viewer.html" target="_blank" class="quick-link">
                         <i class="bi bi-tornado"></i>
                         <span>Nadocast</span>
                     </a>
@@ -313,10 +435,24 @@
                 <div class="col text-center">
                     <div class="footer-content">
                         <span class="footer-text">
-                            Auto-refresh: <span id="refreshTimer">5:00</span> | Data: NWS API, iDriveArkansas
+                            Auto-refresh: <span id="refreshTimer">5:00</span>
+                        </span>
+                        <span class="footer-data">
+                            Data: 
+                            <a href="https://www.idrivearkansas.com/" target="_blank">iDrive Arkansas</a> · 
+                            <a href="https://globe.adsbexchange.com/" target="_blank">ADS-B Exchange</a> · 
+                            <a href="https://www.weather.gov/tsa/" target="_blank">NWS Tulsa</a> · 
+                            <a href="https://data.nadocast.com/" target="_blank">Nadocast</a> · 
+                            <a href="https://www.spc.noaa.gov/" target="_blank">SPC</a> · 
+                            <a href="https://www.nhc.noaa.gov/" target="_blank">NHC</a> · 
+                            <a href="https://www.pivotalweather.com/" target="_blank">Pivotal Weather</a> · 
+                            <a href="https://weather.cod.edu/" target="_blank">COD Weather</a> · 
+                            <a href="https://livestormchasing.com/" target="_blank">Storm Streams</a> · 
+                            <a href="https://forecast.weather.gov/" target="_blank">NWS Forecast</a>
                         </span>
                         <span class="footer-credits">
-                            Rework of <a href="https://www.linkedin.com/in/ckwark/" target="_blank" class="credit-link">Cameron Wilson's</a> airtrak.me Site 
+                            Rework of <a href="https://www.linkedin.com/in/ckwark/" target="_blank" class="credit-link">Cameron Wilson's</a> 
+                            <a href="http://airtrak.me" target="_blank" class="credit-link">airtrak.me</a> Site 
                             by <a href="https://www.linkedin.com/in/maximiliano-garcia642/" target="_blank" class="credit-link">Maximiliano Garcia</a>
                         </span>
                     </div>
@@ -326,7 +462,7 @@
     </footer>
 
     <!-- Bootstrap JS -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <!-- OpenLayers JS -->
     <script src="https://cdn.jsdelivr.net/npm/ol@7.5.2/dist/ol.js"></script>
     <!-- Custom Dashboard JS -->
