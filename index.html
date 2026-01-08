@@ -64,6 +64,9 @@
                 <h3><i class="bi bi-thermometer-half"></i> Local Weather</h3>
                 <div class="panel-header-right">
                     <span class="panel-location">Springdale, AR (KASG)</span>
+                    <button class="btn-panel-refresh" onclick="getWeather()" title="Refresh Weather">
+                        <i class="bi bi-arrow-clockwise"></i>
+                    </button>
                     <a href="https://forecast.weather.gov/MapClick.php?lat=36.06487500000003&lon=-94.16178999999994" target="_blank" class="external-link" title="Open NWS Forecast">
                         <i class="bi bi-box-arrow-up-right"></i>
                     </a>
@@ -135,53 +138,21 @@
             <div class="panel-header">
                 <h3><i class="bi bi-exclamation-triangle-fill"></i> iDriveArkansas Incidents</h3>
                 <div class="panel-header-right">
-                    <a href="https://www.idrivearkansas.com/" target="_blank" class="external-link" title="Open iDriveArkansas">
+                    <button class="btn-panel-refresh" onclick="refreshIncidentsPanel()" title="Refresh Incidents">
+                        <i class="bi bi-arrow-clockwise"></i>
+                    </button>
+                    <a href="https://www.idrivearkansas.com/travel_info/report?report_type=incidents&show_tir_btn=1" target="_blank" class="external-link" title="Open iDriveArkansas">
                         <i class="bi bi-box-arrow-up-right"></i>
                     </a>
                 </div>
             </div>
-            <div class="panel-content">
-                <div class="panel-controls-row">
-                    <label class="form-check form-check-inline">
-                        <input class="form-check-input" type="checkbox" id="bridgeCheck" checked>
-                        <span class="form-check-label">Ignore bridges, construction, maintenance</span>
-                    </label>
-                    <button class="btn btn-sm btn-outline-neon" id="refreshIncidents">
-                        <i class="bi bi-arrow-clockwise"></i> Refresh
-                    </button>
-                    <button class="btn btn-sm btn-outline-warning" id="clearIgnored">
-                        Clear Ignored
-                    </button>
-                    <label class="form-check form-check-inline">
-                        <input class="form-check-input" type="checkbox" id="autoPlayCheck">
-                        <span class="form-check-label">Play sound</span>
-                    </label>
-                </div>
-                <div class="incidents-count">
-                    <span class="count-badge" id="incidentCount">0</span>
-                    <span>Active Incidents</span>
-                </div>
-                <div class="table-responsive">
-                    <table class="table table-bordered table-dark table-striped table-hover" id="eventTable">
-                        <thead>
-                            <tr>
-                                <th>Ignore</th>
-                                <th>County</th>
-                                <th>Type</th>
-                                <th>Route</th>
-                                <th>Description</th>
-                                <th>Lanes</th>
-                                <th>Nearest Cam</th>
-                                <th>Map</th>
-                            </tr>
-                        </thead>
-                        <tbody id="incidentTableBody">
-                            <tr>
-                                <td colspan="8" class="text-center">Loading incidents...</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
+            <div class="panel-content iframe-container">
+                <iframe 
+                    id="incidentsIframe"
+                    src="https://www.idrivearkansas.com/travel_info/report?report_type=incidents&show_tir_btn=1"
+                    title="iDriveArkansas Incidents"
+                    loading="lazy">
+                </iframe>
             </div>
         </section>
 
@@ -190,13 +161,21 @@
             <div class="panel-header">
                 <h3><i class="bi bi-map-fill"></i> Incidents Map</h3>
                 <div class="panel-header-right">
+                    <button class="btn-panel-refresh" onclick="refreshMapPanel()" title="Refresh Map">
+                        <i class="bi bi-arrow-clockwise"></i>
+                    </button>
                     <a href="https://www.idrivearkansas.com/map" target="_blank" class="external-link" title="Open Full Map">
                         <i class="bi bi-box-arrow-up-right"></i>
                     </a>
                 </div>
             </div>
-            <div class="panel-content">
-                <div id="incidentMap" class="map-container"></div>
+            <div class="panel-content iframe-container">
+                <iframe 
+                    id="mapIframe"
+                    src="https://www.idrivearkansas.com/map"
+                    title="iDriveArkansas Map"
+                    loading="lazy">
+                </iframe>
             </div>
         </section>
 
@@ -204,6 +183,9 @@
             <div class="panel-header">
                 <h3><i class="bi bi-airplane-fill"></i> ADS-B Plane Tracker</h3>
                 <div class="panel-header-right">
+                    <button class="btn-panel-refresh" onclick="refreshIframe('adsbIframe')" title="Refresh Plane Tracker">
+                        <i class="bi bi-arrow-clockwise"></i>
+                    </button>
                     <a href="https://globe.adsbexchange.com/?lat=36.1&lon=-94.1&zoom=9" target="_blank" class="external-link" title="Open ADS-B Exchange">
                         <i class="bi bi-box-arrow-up-right"></i>
                     </a>
@@ -211,6 +193,7 @@
             </div>
             <div class="panel-content iframe-container">
                 <iframe 
+                    id="adsbIframe"
                     src="https://globe.adsbexchange.com/?lat=36.1&lon=-94.1&zoom=9&hideSideBar&hideButtons" 
                     title="ADS-B Exchange"
                     loading="lazy"
@@ -229,6 +212,9 @@
                     <button class="tab-btn" data-tab="pivotal">Pivotal</button>
                 </div>
                 <div class="panel-header-right">
+                    <button class="btn-panel-refresh" onclick="refreshRadarPanel()" title="Refresh Radar">
+                        <i class="bi bi-arrow-clockwise"></i>
+                    </button>
                     <a href="https://radar.weather.gov/" target="_blank" class="external-link" title="Open NWS Radar">
                         <i class="bi bi-box-arrow-up-right"></i>
                     </a>
@@ -240,6 +226,7 @@
                 </div>
                 <div class="tab-content" id="cod-tab">
                     <iframe 
+                        id="codRadarIframe"
                         src="https://weather.cod.edu/satrad/nexrad/?parms=SRX-N0B-0-48-100-usa-rad"
                         title="COD Radar"
                         loading="lazy">
@@ -247,6 +234,7 @@
                 </div>
                 <div class="tab-content" id="pivotal-tab">
                     <iframe 
+                        id="pivotalRadarIframe"
                         src="https://home.pivotalweather.com/"
                         title="Pivotal Weather"
                         loading="lazy">
@@ -265,6 +253,9 @@
                     <button class="tab-btn" data-tab="nadocast">Nadocast</button>
                 </div>
                 <div class="panel-header-right">
+                    <button class="btn-panel-refresh" onclick="refreshSeverePanel()" title="Refresh Severe Weather">
+                        <i class="bi bi-arrow-clockwise"></i>
+                    </button>
                     <a href="https://www.spc.noaa.gov/" target="_blank" class="external-link" title="Open SPC">
                         <i class="bi bi-box-arrow-up-right"></i>
                     </a>
@@ -273,6 +264,7 @@
             <div class="panel-content">
                 <div class="tab-content active" id="spc-tab">
                     <iframe 
+                        id="spcIframe"
                         src="https://www.spc.noaa.gov/classic.html"
                         title="SPC Products"
                         loading="lazy">
@@ -280,6 +272,7 @@
                 </div>
                 <div class="tab-content" id="nhc-tab">
                     <iframe 
+                        id="nhcIframe"
                         src="https://www.nhc.noaa.gov/"
                         title="National Hurricane Center"
                         loading="lazy">
@@ -287,7 +280,8 @@
                 </div>
                 <div class="tab-content" id="nadocast-tab">
                     <iframe 
-                        src="https://data.nadocast.com/viewer.html"
+                        id="nadocastIframe"
+                        src="http://data.nadocast.com/viewer.html"
                         title="Nadocast"
                         loading="lazy">
                     </iframe>
@@ -305,6 +299,9 @@
                     <button class="tab-btn" data-tab="pivotalmodels">Pivotal Models</button>
                 </div>
                 <div class="panel-header-right">
+                    <button class="btn-panel-refresh" onclick="refreshModelsPanel()" title="Refresh Models">
+                        <i class="bi bi-arrow-clockwise"></i>
+                    </button>
                     <a href="https://weather.cod.edu/forecast/" target="_blank" class="external-link" title="Open COD Models">
                         <i class="bi bi-box-arrow-up-right"></i>
                     </a>
@@ -313,6 +310,7 @@
             <div class="panel-content">
                 <div class="tab-content active" id="soundings-tab">
                     <iframe 
+                        id="soundingsIframe"
                         src="https://www.spc.noaa.gov/exper/soundings/"
                         title="NWS Soundings"
                         loading="lazy">
@@ -320,6 +318,7 @@
                 </div>
                 <div class="tab-content" id="models-tab">
                     <iframe 
+                        id="codModelsIframe"
                         src="https://weather.cod.edu/forecast/"
                         title="COD Models"
                         loading="lazy">
@@ -327,6 +326,7 @@
                 </div>
                 <div class="tab-content" id="pivotalmodels-tab">
                     <iframe 
+                        id="pivotalModelsIframe"
                         src="https://www.pivotalweather.com/model.php"
                         title="Pivotal Weather Models"
                         loading="lazy">
@@ -340,6 +340,9 @@
             <div class="panel-header">
                 <h3><i class="bi bi-cloud-sun"></i> NWS Tulsa</h3>
                 <div class="panel-header-right">
+                    <button class="btn-panel-refresh" onclick="refreshIframe('nwsIframe')" title="Refresh NWS">
+                        <i class="bi bi-arrow-clockwise"></i>
+                    </button>
                     <a href="https://www.weather.gov/tsa/" target="_blank" class="external-link" title="Open NWS Tulsa">
                         <i class="bi bi-box-arrow-up-right"></i>
                     </a>
@@ -347,6 +350,7 @@
             </div>
             <div class="panel-content iframe-container">
                 <iframe 
+                    id="nwsIframe"
                     src="https://www.weather.gov/tsa/"
                     title="NWS Tulsa"
                     loading="lazy">
@@ -358,6 +362,9 @@
             <div class="panel-header">
                 <h3><i class="bi bi-broadcast"></i> Storm Streams</h3>
                 <div class="panel-header-right">
+                    <button class="btn-panel-refresh" onclick="refreshIframe('streamsIframe')" title="Refresh Streams">
+                        <i class="bi bi-arrow-clockwise"></i>
+                    </button>
                     <a href="https://livestormchasing.com/" target="_blank" class="external-link" title="Open Storm Streams">
                         <i class="bi bi-box-arrow-up-right"></i>
                     </a>
@@ -365,6 +372,7 @@
             </div>
             <div class="panel-content iframe-container">
                 <iframe 
+                    id="streamsIframe"
                     src="https://livestormchasing.com/"
                     title="Storm Streams"
                     loading="lazy">
@@ -391,7 +399,7 @@
                         <i class="bi bi-cloud-sun"></i>
                         <span>NWS Tulsa</span>
                     </a>
-                    <a href="https://data.nadocast.com/viewer.html" target="_blank" class="quick-link">
+                    <a href="http://data.nadocast.com/viewer.html" target="_blank" class="quick-link">
                         <i class="bi bi-tornado"></i>
                         <span>Nadocast</span>
                     </a>
@@ -419,10 +427,17 @@
                         <i class="bi bi-geo-alt-fill"></i>
                         <span>NWS Forecast</span>
                     </a>
+                    <a href="https://arkansas.trafficcamarchive.com/cameraList.jsp" target="_blank" class="quick-link">
+                        <i class="bi bi-camera-video-fill"></i>
+                        <span>Traffic Cams</span>
+                    </a>
                 </div>
                 <div class="camera-count mt-3">
                     <i class="bi bi-camera-video-fill"></i>
-                    <span id="cameraCount">0</span> Traffic Cameras Online
+                    <span id="cameraCount">Loading...</span> Traffic Cameras Online
+                    <a href="https://arkansas.trafficcamarchive.com/cameraList.jsp" target="_blank" class="camera-link">
+                        <i class="bi bi-box-arrow-up-right"></i>
+                    </a>
                 </div>
             </div>
         </section>
@@ -442,13 +457,14 @@
                             <a href="https://www.idrivearkansas.com/" target="_blank">iDrive Arkansas</a> · 
                             <a href="https://globe.adsbexchange.com/" target="_blank">ADS-B Exchange</a> · 
                             <a href="https://www.weather.gov/tsa/" target="_blank">NWS Tulsa</a> · 
-                            <a href="https://data.nadocast.com/" target="_blank">Nadocast</a> · 
+                            <a href="http://data.nadocast.com/" target="_blank">Nadocast</a> · 
                             <a href="https://www.spc.noaa.gov/" target="_blank">SPC</a> · 
                             <a href="https://www.nhc.noaa.gov/" target="_blank">NHC</a> · 
                             <a href="https://www.pivotalweather.com/" target="_blank">Pivotal Weather</a> · 
                             <a href="https://weather.cod.edu/" target="_blank">COD Weather</a> · 
                             <a href="https://livestormchasing.com/" target="_blank">Storm Streams</a> · 
-                            <a href="https://forecast.weather.gov/" target="_blank">NWS Forecast</a>
+                            <a href="https://forecast.weather.gov/" target="_blank">NWS Forecast</a> · 
+                            <a href="https://arkansas.trafficcamarchive.com/" target="_blank">AR Traffic Cam Archive</a>
                         </span>
                         <span class="footer-credits">
                             Rework of <a href="https://www.linkedin.com/in/ckwark/" target="_blank" class="credit-link">Cameron Wilson's</a> 

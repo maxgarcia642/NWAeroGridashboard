@@ -338,6 +338,49 @@ body::before {
     text-shadow: 0 0 10px var(--neon-cyan);
 }
 
+/* Panel Refresh Button */
+.btn-panel-refresh {
+    background: transparent;
+    border: 1px solid var(--neon-purple);
+    color: var(--neon-purple);
+    padding: 3px 8px;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-size: 0.8rem;
+}
+
+.btn-panel-refresh:hover {
+    background: var(--neon-purple);
+    color: #fff;
+    transform: scale(1.15);
+    box-shadow: 0 0 15px rgba(191, 0, 255, 0.5);
+}
+
+.btn-panel-refresh:active {
+    transform: scale(0.95);
+}
+
+.btn-panel-refresh i {
+    transition: transform 0.5s ease;
+}
+
+.btn-panel-refresh:hover i {
+    transform: rotate(180deg);
+}
+
+/* Camera link */
+.camera-link {
+    color: var(--neon-cyan);
+    margin-left: 10px;
+    transition: all 0.3s ease;
+}
+
+.camera-link:hover {
+    color: var(--neon-pink);
+    transform: scale(1.2);
+}
+
 .panel-content {
     flex: 1;
     padding: var(--panel-padding);
