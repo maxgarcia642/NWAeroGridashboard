@@ -23,10 +23,13 @@
         <div class="container-fluid">
             <div class="row align-items-center">
                 <div class="col-auto">
-                    <h1 class="logo-text">
-                        <i class="bi bi-cloud-sun-fill"></i>
-                        NWA GRID
-                    </h1>
+                    <div class="logo-section">
+                        <h1 class="logo-text">
+                            <i class="bi bi-cloud-sun-fill"></i>
+                            NWA GRID
+                        </h1>
+                        <span class="logo-credits">by Cameron Wilson & Maximiliano Garcia</span>
+                    </div>
                 </div>
                 <div class="col">
                     <div class="header-info">
@@ -67,6 +70,7 @@
                             <span class="temp-unit">°F</span>
                         </div>
                         <div class="conditions" id="wxConditions">Loading...</div>
+                        <div class="feels-like" id="wxFeelsLike"></div>
                     </div>
                     <div class="weather-details">
                         <div class="wx-detail">
@@ -88,6 +92,26 @@
                             <i class="bi bi-moisture"></i>
                             <span class="detail-label">Humidity</span>
                             <span class="detail-value" id="wxHumidity">--%</span>
+                        </div>
+                        <div class="wx-detail">
+                            <i class="bi bi-eye-fill"></i>
+                            <span class="detail-label">Visibility</span>
+                            <span class="detail-value" id="wxVisibility">-- mi</span>
+                        </div>
+                        <div class="wx-detail">
+                            <i class="bi bi-speedometer"></i>
+                            <span class="detail-label">Pressure</span>
+                            <span class="detail-value" id="wxPressure">-- inHg</span>
+                        </div>
+                        <div class="wx-detail">
+                            <i class="bi bi-compass"></i>
+                            <span class="detail-label">Wind Dir</span>
+                            <span class="detail-value" id="wxWindDir">--</span>
+                        </div>
+                        <div class="wx-detail">
+                            <i class="bi bi-cloud-fill"></i>
+                            <span class="detail-label">Ceiling</span>
+                            <span class="detail-value" id="wxCeiling">-- ft</span>
                         </div>
                     </div>
                 </div>
@@ -176,7 +200,6 @@
                 <div class="panel-tabs">
                     <button class="tab-btn active" data-tab="nws">NWS</button>
                     <button class="tab-btn" data-tab="cod">COD</button>
-                    <button class="tab-btn" data-tab="pivotal">Pivotal</button>
                 </div>
             </div>
             <div class="panel-content">
@@ -185,15 +208,8 @@
                 </div>
                 <div class="tab-content" id="cod-tab">
                     <iframe 
-                        src="https://weather.cod.edu/satrad/?pession=standard&focus=radar&mapname=usa&resolution=1000m&palette=ir&animation=on"
+                        src="https://weather.cod.edu/satrad/nexrad/?parms=SRX-N0B-0-48-100-usa-rad"
                         title="COD Radar"
-                        loading="lazy">
-                    </iframe>
-                </div>
-                <div class="tab-content" id="pivotal-tab">
-                    <iframe 
-                        src="https://www.pivotalweather.com/model.php?m=hrrr&p=radar_ref1km&rh=2023&fh=0&lat=36.1&lon=-94.1&zoom=8"
-                        title="Pivotal Weather Radar"
                         loading="lazy">
                     </iframe>
                 </div>
@@ -277,6 +293,10 @@
                         <i class="bi bi-broadcast"></i>
                         <span>Storm Streams</span>
                     </a>
+                    <a href="https://forecast.weather.gov/MapClick.php?lat=36.06487500000003&lon=-94.16178999999994" target="_blank" class="quick-link">
+                        <i class="bi bi-geo-alt-fill"></i>
+                        <span>NWS Forecast</span>
+                    </a>
                 </div>
                 <div class="camera-count mt-3">
                     <i class="bi bi-camera-video-fill"></i>
@@ -291,10 +311,15 @@
         <div class="container-fluid">
             <div class="row">
                 <div class="col text-center">
-                    <span class="footer-text">
-                        NWA Grid Dashboard | Auto-refresh: <span id="refreshTimer">5:00</span>
-                        | Data: NWS API, iDriveArkansas
-                    </span>
+                    <div class="footer-content">
+                        <span class="footer-text">
+                            Auto-refresh: <span id="refreshTimer">5:00</span> | Data: NWS API, iDriveArkansas
+                        </span>
+                        <span class="footer-credits">
+                            Rework of <a href="https://www.linkedin.com/in/ckwark/" target="_blank" class="credit-link">Cameron Wilson's</a> airtrak.me Site 
+                            by <a href="https://www.linkedin.com/in/maximiliano-garcia642/" target="_blank" class="credit-link">Maximiliano Garcia</a>
+                        </span>
+                    </div>
                 </div>
             </div>
         </div>
