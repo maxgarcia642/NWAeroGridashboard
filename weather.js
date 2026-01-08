@@ -4,337 +4,437 @@
  * 
  * Rework of Cameron Wilson's airtrak.me Site
  * by Maximiliano Garcia
+ * GitHub: https://github.com/maxgarcia642/NWAeroGridashboard
  */
 
 // ================================================
 // Configuration
 // ================================================
 const CONFIG = {
-    // NWS API Configuration
-    NWS_STATION: 'KASG', // Springdale, AR
+    NWS_STATION: 'KASG',
     NWS_API_BASE: 'https://api.weather.gov',
     
-    // Traffic Cam Archive for camera count
-    CAMERA_ARCHIVE_URL: 'https://arkansas.trafficcamarchive.com/cameraList.jsp',
+    // iDriveArkansas API endpoints
+    IDRIVE_EVENTS_URL: 'https://www.idrivearkansas.com/api/events',
+    IDRIVE_CAMERAS_URL: 'https://www.idrivearkansas.com/api/cameras',
     
-    // Location (Springdale, AR area)
-    HOME_LOCATION: {
-        lat: 36.1867,
-        lon: -94.1288
-    },
+    HOME_LOCATION: { lat: 36.1867, lon: -94.1288 },
     
-    // Refresh intervals (in milliseconds)
-    REFRESH_WEATHER: 5 * 60 * 1000,      // 5 minutes
-    REFRESH_CAMERAS: 10 * 60 * 1000,      // 10 minutes
+    REFRESH_WEATHER: 5 * 60 * 1000,
+    REFRESH_INCIDENTS: 30 * 1000,
+    REFRESH_CAMERAS: 10 * 60 * 1000,
 };
 
 // ================================================
-// State Management
+// State
 // ================================================
 const state = {
+    ignoredIds: JSON.parse(localStorage.getItem('ignoredIds') || '[]'),
+    cameras: [],
     autoPlaySound: false,
     lastUpdate: null,
-    refreshCountdown: 300, // seconds
+    refreshCountdown: 300,
+    previousIncidentCount: 0
 };
 
 // ================================================
-// Utility Functions
+// Utilities
 // ================================================
+function padZero(num) { return num < 10 ? '0' + num : num; }
 
-function padZero(num) {
-    return num < 10 ? '0' + num : num;
+function degToRad(deg) { return deg * (Math.PI / 180); }
+
+function getDistance(loc1, loc2) {
+    const R = 3959;
+    const dLat = degToRad(loc2.lat - loc1.lat);
+    const dLon = degToRad(loc2.lon - loc1.lon);
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+              Math.cos(degToRad(loc1.lat)) * Math.cos(degToRad(loc2.lat)) *
+              Math.sin(dLon/2) * Math.sin(dLon/2);
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
 
-function getDewpointClass(dewpoint) {
-    if (dewpoint < 55) return 'dewpoint-comfortable';
-    if (dewpoint < 65) return 'dewpoint-sticky';
-    if (dewpoint < 70) return 'dewpoint-oppressive';
+function getDewpointClass(dp) {
+    if (dp < 55) return 'dewpoint-comfortable';
+    if (dp < 65) return 'dewpoint-sticky';
+    if (dp < 70) return 'dewpoint-oppressive';
     return 'dewpoint-miserable';
 }
 
-function degreesToCompass(degrees) {
-    if (degrees === null || degrees === undefined) return '--';
-    const directions = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 
-                       'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
-    const index = Math.round(degrees / 22.5) % 16;
-    return directions[index];
+function degreesToCompass(deg) {
+    if (deg === null || deg === undefined) return '--';
+    const dirs = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+    return dirs[Math.round(deg / 22.5) % 16];
 }
 
-function calculateHeatIndex(tempF, humidity) {
-    if (tempF < 80 || humidity === null) return null;
-    const T = tempF, R = humidity;
-    let HI = -42.379 + 2.04901523 * T + 10.14333127 * R 
-           - 0.22475541 * T * R - 0.00683783 * T * T 
-           - 0.05481717 * R * R + 0.00122874 * T * T * R 
-           + 0.00085282 * T * R * R - 0.00000199 * T * T * R * R;
-    return Math.round(HI);
+function calculateHeatIndex(T, R) {
+    if (T < 80 || R === null) return null;
+    return Math.round(-42.379 + 2.04901523*T + 10.14333127*R - 0.22475541*T*R 
+           - 0.00683783*T*T - 0.05481717*R*R + 0.00122874*T*T*R 
+           + 0.00085282*T*R*R - 0.00000199*T*T*R*R);
 }
 
-function calculateWindChill(tempF, windMph) {
-    if (tempF > 50 || windMph < 3) return null;
-    const WC = 35.74 + 0.6215 * tempF - 35.75 * Math.pow(windMph, 0.16) 
-             + 0.4275 * tempF * Math.pow(windMph, 0.16);
-    return Math.round(WC);
+function calculateWindChill(T, W) {
+    if (T > 50 || W < 3) return null;
+    return Math.round(35.74 + 0.6215*T - 35.75*Math.pow(W, 0.16) + 0.4275*T*Math.pow(W, 0.16));
+}
+
+function findNearestCamera(lat, lon) {
+    if (!state.cameras.length) return null;
+    let minDist = Infinity, nearest = null;
+    for (const cam of state.cameras) {
+        const cLat = cam.latitude || cam.lat;
+        const cLon = cam.longitude || cam.lon || cam.lng;
+        if (cLat && cLon) {
+            const d = getDistance({lat, lon}, {lat: cLat, lon: cLon});
+            if (d < minDist) { minDist = d; nearest = {...cam, distance: d}; }
+        }
+    }
+    return nearest;
 }
 
 // ================================================
-// Central Time Clock (12-hour format with AM/PM)
+// Clock
 // ================================================
-
 function updateCentralClock() {
     const now = new Date();
-    const centralTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/Chicago' }));
-    
-    let hours = centralTime.getHours();
-    const minutes = padZero(centralTime.getMinutes());
-    const seconds = padZero(centralTime.getSeconds());
-    const ampm = hours >= 12 ? 'PM' : 'AM';
-    hours = hours % 12 || 12;
-    
-    document.getElementById('centralClock').textContent = `${hours}:${minutes}:${seconds} ${ampm} CT`;
+    const ct = new Date(now.toLocaleString('en-US', { timeZone: 'America/Chicago' }));
+    let h = ct.getHours();
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    h = h % 12 || 12;
+    document.getElementById('centralClock').textContent = 
+        `${h}:${padZero(ct.getMinutes())}:${padZero(ct.getSeconds())} ${ampm} CT`;
 }
 
 function updateRefreshTimer() {
     state.refreshCountdown--;
-    if (state.refreshCountdown <= 0) {
-        state.refreshCountdown = 300;
-        refreshAll();
-    }
-    
-    const minutes = Math.floor(state.refreshCountdown / 60);
-    const seconds = state.refreshCountdown % 60;
-    document.getElementById('refreshTimer').textContent = `${minutes}:${padZero(seconds)}`;
+    if (state.refreshCountdown <= 0) { state.refreshCountdown = 300; }
+    const m = Math.floor(state.refreshCountdown / 60);
+    document.getElementById('refreshTimer').textContent = `${m}:${padZero(state.refreshCountdown % 60)}`;
 }
 
 // ================================================
-// Weather Functions
+// Weather
 // ================================================
-
 async function getWeather() {
-    const stationUrl = `${CONFIG.NWS_API_BASE}/stations/${CONFIG.NWS_STATION}/observations/latest`;
-    
     try {
-        const response = await fetch(stationUrl, {
-            headers: {
-                'User-Agent': 'NWA Grid Dashboard',
-                'Accept': 'application/geo+json'
-            }
+        const res = await fetch(`${CONFIG.NWS_API_BASE}/stations/${CONFIG.NWS_STATION}/observations/latest`, {
+            headers: { 'User-Agent': 'NWA Grid Dashboard', 'Accept': 'application/geo+json' }
         });
+        if (!res.ok) throw new Error(`API error: ${res.status}`);
+        const data = await res.json();
+        const p = data.properties;
         
-        if (!response.ok) throw new Error(`Weather API error: ${response.status}`);
+        const tempC = p.temperature?.value;
+        const dewC = p.dewpoint?.value;
+        const windKmh = p.windSpeed?.value;
+        const gustKmh = p.windGust?.value;
+        const windDir = p.windDirection?.value;
+        const hum = p.relativeHumidity?.value;
+        const visM = p.visibility?.value;
+        const pressPa = p.barometricPressure?.value;
+        const cond = p.textDescription || 'Unknown';
         
-        const data = await response.json();
-        const props = data.properties;
+        const tempF = tempC != null ? Math.round(tempC * 9/5 + 32) : '--';
+        const dewF = dewC != null ? Math.round(dewC * 9/5 + 32) : '--';
+        const windMph = windKmh != null ? Math.round(windKmh * 0.621371) : '--';
+        const gustMph = gustKmh != null ? Math.round(gustKmh * 0.621371) : '--';
+        const humPct = hum != null ? Math.round(hum) : '--';
+        const visMi = visM != null ? Math.round(visM / 1609.34 * 10) / 10 : '--';
+        const pressIn = pressPa != null ? (pressPa / 3386.39).toFixed(2) : '--';
         
-        // Extract values
-        const tempC = props.temperature?.value;
-        const dewpointC = props.dewpoint?.value;
-        const windSpeedKmh = props.windSpeed?.value;
-        const windGustKmh = props.windGust?.value;
-        const windDirection = props.windDirection?.value;
-        const humidity = props.relativeHumidity?.value;
-        const visibilityM = props.visibility?.value;
-        const pressurePa = props.barometricPressure?.value;
-        const conditions = props.textDescription || 'Unknown';
+        let dewDep = '--';
+        if (typeof tempF === 'number' && typeof dewF === 'number') dewDep = (tempF - dewF) + '°F';
         
-        // Convert units
-        const tempF = tempC !== null && tempC !== undefined ? Math.round((tempC * 9/5) + 32) : '--';
-        const dewpointF = dewpointC !== null && dewpointC !== undefined ? Math.round((dewpointC * 9/5) + 32) : '--';
-        const windMph = windSpeedKmh !== null && windSpeedKmh !== undefined ? Math.round(windSpeedKmh * 0.621371) : '--';
-        const gustMph = windGustKmh !== null && windGustKmh !== undefined ? Math.round(windGustKmh * 0.621371) : '--';
-        const humidityPct = humidity !== null && humidity !== undefined ? Math.round(humidity) : '--';
-        const visibilityMi = visibilityM !== null && visibilityM !== undefined ? Math.round(visibilityM / 1609.34 * 10) / 10 : '--';
-        const pressureInHg = pressurePa !== null && pressurePa !== undefined ? (pressurePa / 3386.39).toFixed(2) : '--';
-        const windDir = degreesToCompass(windDirection);
-        
-        // Calculate dewpoint depression
-        let dewDepression = '--';
-        if (typeof tempF === 'number' && typeof dewpointF === 'number') {
-            dewDepression = (tempF - dewpointF) + '°F';
-        }
-        
-        // Calculate feels like
         let feelsLike = '';
-        if (typeof tempF === 'number' && typeof humidityPct === 'number') {
-            const heatIndex = calculateHeatIndex(tempF, humidityPct);
-            const windChill = typeof windMph === 'number' ? calculateWindChill(tempF, windMph) : null;
-            
-            if (heatIndex !== null && heatIndex !== tempF) {
-                feelsLike = `Heat Index: ${heatIndex}°F`;
-            } else if (windChill !== null && windChill !== tempF) {
-                feelsLike = `Wind Chill: ${windChill}°F`;
-            }
+        if (typeof tempF === 'number' && typeof humPct === 'number') {
+            const hi = calculateHeatIndex(tempF, humPct);
+            const wc = typeof windMph === 'number' ? calculateWindChill(tempF, windMph) : null;
+            if (hi != null && hi !== tempF) feelsLike = `Heat Index: ${hi}°F`;
+            else if (wc != null && wc !== tempF) feelsLike = `Wind Chill: ${wc}°F`;
         }
         
-        // Update DOM
         document.getElementById('wxTemp').textContent = tempF;
-        document.getElementById('wxConditions').textContent = conditions;
+        document.getElementById('wxConditions').textContent = cond;
         document.getElementById('wxWind').textContent = `${windMph} mph`;
         document.getElementById('wxGusts').textContent = gustMph !== '--' ? `${gustMph} mph` : 'None';
-        document.getElementById('wxHumidity').textContent = `${humidityPct}%`;
-        document.getElementById('wxVisibility').textContent = `${visibilityMi} mi`;
-        document.getElementById('wxPressure').textContent = `${pressureInHg}"`;
-        document.getElementById('wxWindDir').textContent = windDir;
-        document.getElementById('wxDewDepression').textContent = dewDepression;
+        document.getElementById('wxHumidity').textContent = `${humPct}%`;
+        document.getElementById('wxVisibility').textContent = `${visMi} mi`;
+        document.getElementById('wxPressure').textContent = `${pressIn}"`;
+        document.getElementById('wxWindDir').textContent = degreesToCompass(windDir);
+        document.getElementById('wxDewDepression').textContent = dewDep;
         document.getElementById('wxFeelsLike').textContent = feelsLike;
         
-        // Update dewpoint with color coding
-        const dewpointEl = document.getElementById('wxDewpoint');
-        dewpointEl.textContent = `${dewpointF}°F`;
-        if (typeof dewpointF === 'number') {
-            dewpointEl.className = `detail-value ${getDewpointClass(dewpointF)}`;
-        }
+        const dewEl = document.getElementById('wxDewpoint');
+        dewEl.textContent = `${dewF}°F`;
+        if (typeof dewF === 'number') dewEl.className = `detail-value ${getDewpointClass(dewF)}`;
         
-        // Update last update time (Central Time)
         state.lastUpdate = new Date();
-        const centralTime = new Date(state.lastUpdate.toLocaleString('en-US', { timeZone: 'America/Chicago' }));
-        let hours = centralTime.getHours();
-        const ampm = hours >= 12 ? 'PM' : 'AM';
-        hours = hours % 12 || 12;
-        document.getElementById('lastUpdate').textContent = `Last: ${hours}:${padZero(centralTime.getMinutes())} ${ampm}`;
+        const ct = new Date(state.lastUpdate.toLocaleString('en-US', { timeZone: 'America/Chicago' }));
+        let h = ct.getHours(); const ampm = h >= 12 ? 'PM' : 'AM'; h = h % 12 || 12;
+        document.getElementById('lastUpdate').textContent = `Last: ${h}:${padZero(ct.getMinutes())} ${ampm}`;
         
-        // Refresh images
-        const timestamp = Date.now();
-        const spcOutlook = document.getElementById('spcOutlook');
-        const nwsRadar = document.getElementById('nwsRadar');
+        const ts = Date.now();
+        const spc = document.getElementById('spcOutlook');
+        const radar = document.getElementById('nwsRadar');
+        if (spc) spc.src = `https://www.spc.noaa.gov/products/outlook/day1otlk.gif?t=${ts}`;
+        if (radar) radar.src = `https://radar.weather.gov/ridge/standard/KSRX_0.gif?t=${ts}`;
         
-        if (spcOutlook) spcOutlook.src = `https://www.spc.noaa.gov/products/outlook/day1otlk.gif?t=${timestamp}`;
-        if (nwsRadar) nwsRadar.src = `https://radar.weather.gov/ridge/standard/KSRX_0.gif?t=${timestamp}`;
-        
-        console.log('Weather updated successfully');
-        
-    } catch (error) {
-        console.error('Error fetching weather:', error);
-        document.getElementById('wxConditions').textContent = 'Error loading';
+        console.log('Weather updated');
+    } catch (e) {
+        console.error('Weather error:', e);
+        document.getElementById('wxConditions').textContent = 'Error';
     }
 }
 
 // ================================================
-// Camera Count (from arkansas.trafficcamarchive.com)
+// Cameras
 // ================================================
-
 async function getCameraCount() {
-    // Since we can't directly fetch the page due to CORS, we'll use a known approximate count
-    // The Arkansas Traffic Cam Archive typically has around 500-600 cameras
-    // We can set this to update periodically if an API becomes available
+    try {
+        const res = await fetch(CONFIG.IDRIVE_CAMERAS_URL);
+        if (!res.ok) throw new Error(`API error: ${res.status}`);
+        const data = await res.json();
+        
+        if (Array.isArray(data)) state.cameras = data;
+        else if (data.features) {
+            state.cameras = data.features.map(f => ({
+                ...f.properties,
+                latitude: f.geometry?.coordinates?.[1],
+                longitude: f.geometry?.coordinates?.[0]
+            }));
+        } else state.cameras = [];
+        
+        document.getElementById('cameraCount').textContent = state.cameras.length || '~547';
+        console.log(`Cameras: ${state.cameras.length}`);
+    } catch (e) {
+        console.error('Camera error:', e);
+        document.getElementById('cameraCount').textContent = '~547';
+    }
+}
+
+// ================================================
+// iDriveArkansas Incidents (doTheThing)
+// ================================================
+async function doTheThing() {
+    const bridgeCheck = document.getElementById('bridgeCheck');
+    const ignoreBridges = bridgeCheck ? bridgeCheck.checked : true;
     
     try {
-        // Try to estimate based on typical Arkansas DOT camera count
-        // This is a reasonable estimate for Arkansas traffic cameras
-        const estimatedCount = 547; // Typical count for Arkansas
-        document.getElementById('cameraCount').textContent = estimatedCount;
-        console.log(`Camera count set to: ${estimatedCount}`);
-    } catch (error) {
-        console.error('Error with camera count:', error);
-        document.getElementById('cameraCount').textContent = '~500';
-    }
-}
-
-// ================================================
-// Iframe Refresh Functions
-// ================================================
-
-function refreshIframe(iframeId) {
-    const iframe = document.getElementById(iframeId);
-    if (iframe) {
-        const src = iframe.src;
-        iframe.src = '';
-        setTimeout(() => { iframe.src = src; }, 100);
-        console.log(`Refreshed iframe: ${iframeId}`);
-    }
-}
-
-function refreshIncidentsPanel() {
-    refreshIframe('incidentsIframe');
-}
-
-function refreshMapPanel() {
-    refreshIframe('mapIframe');
-}
-
-function refreshRadarPanel() {
-    // Refresh NWS radar image
-    const nwsRadar = document.getElementById('nwsRadar');
-    if (nwsRadar) {
-        nwsRadar.src = `https://radar.weather.gov/ridge/standard/KSRX_0.gif?t=${Date.now()}`;
-    }
-    // Refresh COD and Pivotal iframes
-    refreshIframe('codRadarIframe');
-    refreshIframe('pivotalRadarIframe');
-}
-
-function refreshSeverePanel() {
-    refreshIframe('spcIframe');
-    refreshIframe('nhcIframe');
-    refreshIframe('nadocastIframe');
-}
-
-function refreshModelsPanel() {
-    refreshIframe('soundingsIframe');
-    refreshIframe('codModelsIframe');
-    refreshIframe('pivotalModelsIframe');
-}
-
-// ================================================
-// Tab Switching
-// ================================================
-
-function initTabs() {
-    document.querySelectorAll('.panel-tabs').forEach(tabContainer => {
-        const panel = tabContainer.closest('.grid-panel');
-        const tabs = tabContainer.querySelectorAll('.tab-btn');
-        const contents = panel.querySelectorAll('.tab-content');
+        const res = await fetch(CONFIG.IDRIVE_EVENTS_URL);
+        if (!res.ok) throw new Error(`API error: ${res.status}`);
+        const data = await res.json();
         
-        tabs.forEach(tab => {
-            tab.addEventListener('click', () => {
-                const targetId = tab.dataset.tab + '-tab';
-                
-                tabs.forEach(t => t.classList.remove('active'));
-                tab.classList.add('active');
-                
-                contents.forEach(content => {
-                    content.classList.remove('active');
-                    if (content.id === targetId) {
-                        content.classList.add('active');
-                    }
-                });
-            });
+        let events = [];
+        if (Array.isArray(data)) events = data;
+        else if (data.features) {
+            events = data.features.map(f => ({
+                ...f.properties,
+                latitude: f.geometry?.coordinates?.[1],
+                longitude: f.geometry?.coordinates?.[0]
+            }));
+        } else if (data.events) events = data.events;
+        
+        // Filter
+        const filtered = events.filter(e => {
+            const id = String(e.id || e.event_id || e.ID || '');
+            const type = (e.type || e.event_type || e.eventType || '').toLowerCase();
+            const desc = (e.description || e.headline || e.desc || '').toLowerCase();
+            const routeType = (e.route_type || e.routeType || '').toLowerCase();
+            
+            if (state.ignoredIds.includes(id)) return false;
+            if (ignoreBridges) {
+                if (type.includes('construction') || desc.includes('construction')) return false;
+                if (type.includes('maintenance') || desc.includes('maintenance')) return false;
+                if (type.includes('bridge') || desc.includes('bridge')) return false;
+                if (routeType.includes('bridge')) return false;
+            }
+            return true;
         });
-    });
+        
+        // Add nearest camera
+        const processed = filtered.map(e => {
+            const lat = e.latitude || e.lat;
+            const lon = e.longitude || e.lon || e.lng;
+            return { ...e, nearestCamera: (lat && lon) ? findNearestCamera(lat, lon) : null };
+        });
+        
+        renderIncidentsTable(processed);
+        
+        if (state.autoPlaySound && processed.length > state.previousIncidentCount && state.previousIncidentCount > 0) {
+            playAlertSound();
+        }
+        state.previousIncidentCount = processed.length;
+        
+        console.log(`Incidents: ${processed.length}`);
+    } catch (e) {
+        console.error('Incidents error:', e);
+        document.getElementById('incidentTableBody').innerHTML = 
+            `<tr><td colspan="10" class="text-center text-danger">Error loading: ${e.message}</td></tr>`;
+    }
 }
 
-// ================================================
-// Sound Functions
-// ================================================
+function renderIncidentsTable(events) {
+    const tbody = document.getElementById('incidentTableBody');
+    const countEl = document.getElementById('incidentCount');
+    
+    countEl.textContent = events.length;
+    document.title = events.length > 0 ? `(${events.length}) NWA Grid Dashboard` : 'NWA Grid Dashboard';
+    
+    if (!events.length) {
+        tbody.innerHTML = `<tr><td colspan="10" class="text-center text-success"><i class="bi bi-check-circle-fill"></i> No active incidents</td></tr>`;
+        return;
+    }
+    
+    tbody.innerHTML = events.map(e => {
+        const id = e.id || e.event_id || e.ID || Math.random().toString(36).substr(2,9);
+        const county = e.county || e.County || '--';
+        const type = e.type || e.event_type || e.eventType || 'Unknown';
+        const route = e.route || e.road_name || e.Route || '--';
+        const routeType = e.route_type || e.routeType || e.RouteType || '--';
+        const desc = e.description || e.headline || e.desc || 'No description';
+        const lanes = e.lanes_affected || e.lanesAffected || e.Lanes || '--';
+        const reporter = e.reported_by || e.reportedBy || e.source || 'ARDOT';
+        
+        let camText = '--';
+        if (e.nearestCamera) camText = `${e.nearestCamera.distance.toFixed(2)} Miles`;
+        
+        const lat = e.latitude || e.lat;
+        const lon = e.longitude || e.lon || e.lng;
+        const mapLink = lat && lon 
+            ? `<a href="https://www.idrivearkansas.com/map?lat=${lat}&lng=${lon}&zoom=15" target="_blank" class="btn btn-sm btn-outline-neon">Show on iDriveArkansas</a>`
+            : '--';
+        
+        const typeClass = getIncidentTypeClass(type);
+        
+        return `<tr>
+            <td><button class="btn-ignore" onclick="ignoreId('${id}')" title="Ignore"><i class="bi bi-eye-slash"></i> Ignore</button></td>
+            <td>${county}</td>
+            <td><span class="incident-type ${typeClass}">${type}</span></td>
+            <td>${route}</td>
+            <td>${routeType}</td>
+            <td title="${desc}">${desc.substring(0,50)}${desc.length > 50 ? '...' : ''}</td>
+            <td>${lanes}</td>
+            <td>${reporter}</td>
+            <td>${camText}</td>
+            <td>${mapLink}</td>
+        </tr>`;
+    }).join('');
+}
 
-function toggleSound() {
-    state.autoPlaySound = !state.autoPlaySound;
+function getIncidentTypeClass(type) {
+    const t = (type || '').toLowerCase();
+    if (t.includes('crash') || t.includes('accident')) return 'incident-crash';
+    if (t.includes('construction')) return 'incident-construction';
+    if (t.includes('closure') || t.includes('closed')) return 'incident-closure';
+    if (t.includes('weather') || t.includes('flood')) return 'incident-weather';
+    return 'incident-other';
+}
+
+function ignoreId(id) {
+    const idStr = String(id);
+    if (!state.ignoredIds.includes(idStr)) {
+        state.ignoredIds.push(idStr);
+        localStorage.setItem('ignoredIds', JSON.stringify(state.ignoredIds));
+    }
+    doTheThing();
+}
+
+function clearIgnored() {
+    state.ignoredIds = [];
+    localStorage.setItem('ignoredIds', JSON.stringify(state.ignoredIds));
+    doTheThing();
+}
+
+function autoPlay() {
+    const cb = document.getElementById('autoPlayCheck');
+    state.autoPlaySound = cb ? cb.checked : false;
     const btn = document.getElementById('soundToggle');
     const icon = btn?.querySelector('i');
-    if (icon) {
-        icon.className = state.autoPlaySound ? 'bi bi-volume-up-fill' : 'bi bi-volume-mute-fill';
-    }
+    if (icon) icon.className = state.autoPlaySound ? 'bi bi-volume-up-fill' : 'bi bi-volume-mute-fill';
 }
 
 function playAlertSound() {
     const player = document.getElementById('musicplayer');
     if (player && state.autoPlaySound) {
         player.currentTime = 0;
-        player.play().catch(e => console.log('Audio play prevented:', e));
+        player.play().catch(e => console.log('Audio blocked:', e));
     }
 }
 
 // ================================================
-// Refresh All Function
+// Iframe Refresh
 // ================================================
+function refreshIframe(id) {
+    const iframe = document.getElementById(id);
+    if (iframe) {
+        const src = iframe.src;
+        iframe.src = '';
+        setTimeout(() => { iframe.src = src; }, 100);
+    }
+}
 
+function refreshMapPanel() {
+    const img = document.getElementById('mapPreviewImg');
+    if (img) img.src = img.src.split('?')[0] + '?t=' + Date.now();
+}
+
+function refreshRadarPanel() {
+    const radar = document.getElementById('nwsRadar');
+    if (radar) radar.src = `https://radar.weather.gov/ridge/standard/KSRX_0.gif?t=${Date.now()}`;
+    refreshIframe('pivotalRadarIframe');
+}
+
+function refreshSeverePanel() {
+    refreshIframe('spcIframe');
+    refreshIframe('nhcIframe');
+}
+
+function refreshModelsPanel() {
+    refreshIframe('soundingsIframe');
+}
+
+// ================================================
+// Tabs with Dynamic External Links
+// ================================================
+function initTabs() {
+    document.querySelectorAll('.panel-tabs').forEach(tabContainer => {
+        const panel = tabContainer.closest('.grid-panel');
+        const tabs = tabContainer.querySelectorAll('.tab-btn');
+        const contents = panel.querySelectorAll('.tab-content');
+        const extLink = panel.querySelector('.panel-external-link');
+        
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                const targetId = tab.dataset.tab + '-tab';
+                const targetUrl = tab.dataset.url;
+                
+                tabs.forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                
+                contents.forEach(c => {
+                    c.classList.remove('active');
+                    if (c.id === targetId) c.classList.add('active');
+                });
+                
+                // Update external link to match selected tab
+                if (extLink && targetUrl) {
+                    extLink.href = targetUrl;
+                    extLink.title = `Open ${tab.textContent}`;
+                }
+            });
+        });
+    });
+}
+
+// ================================================
+// Refresh All
+// ================================================
 function refreshAll() {
     state.refreshCountdown = 300;
     getWeather();
     getCameraCount();
-    
-    // Refresh all iframes
-    refreshIncidentsPanel();
+    doTheThing();
     refreshMapPanel();
     refreshRadarPanel();
     refreshSeverePanel();
@@ -348,50 +448,38 @@ function refreshAll() {
         btn.classList.add('rotating');
         setTimeout(() => btn.classList.remove('rotating'), 1000);
     }
-    
-    console.log('All panels refreshed');
 }
 
 // ================================================
-// Event Listeners
+// Init
 // ================================================
-
 function initEventListeners() {
-    // Refresh all button
-    const refreshAllBtn = document.getElementById('refreshAllBtn');
-    if (refreshAllBtn) {
-        refreshAllBtn.addEventListener('click', refreshAll);
-    }
-    
-    // Sound toggle button
-    const soundBtn = document.getElementById('soundToggle');
-    if (soundBtn) {
-        soundBtn.addEventListener('click', toggleSound);
-    }
+    document.getElementById('refreshAllBtn')?.addEventListener('click', refreshAll);
+    document.getElementById('soundToggle')?.addEventListener('click', () => {
+        const cb = document.getElementById('autoPlayCheck');
+        if (cb) { cb.checked = !cb.checked; autoPlay(); }
+    });
+    document.getElementById('bridgeCheck')?.addEventListener('change', doTheThing);
 }
 
-// ================================================
-// Initialization
-// ================================================
-
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', () => {
     console.log('NWA Grid Dashboard initializing...');
-    console.log('Rework of Cameron Wilson\'s airtrak.me Site by Maximiliano Garcia');
+    console.log('Rework of Cameron Wilson\'s airtrak.me by Maximiliano Garcia');
+    console.log('GitHub: https://github.com/maxgarcia642/NWAeroGridashboard');
     
     initEventListeners();
     initTabs();
     
-    // Initial data fetch
     getCameraCount();
     getWeather();
+    doTheThing();
     
-    // Start clocks
     updateCentralClock();
     setInterval(updateCentralClock, 1000);
     setInterval(updateRefreshTimer, 1000);
     
-    // Set up refresh intervals
     setInterval(getWeather, CONFIG.REFRESH_WEATHER);
+    setInterval(doTheThing, CONFIG.REFRESH_INCIDENTS);
     setInterval(getCameraCount, CONFIG.REFRESH_CAMERAS);
     
     console.log('Dashboard initialized!');
