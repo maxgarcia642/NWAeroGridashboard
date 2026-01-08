@@ -1,6 +1,9 @@
 /**
  * NWA Grid Dashboard - Weather & Traffic Management System
  * Vaporwave Weather Channel Style
+ * 
+ * Rework of Cameron Wilson's airtrak.me Site
+ * by Maximiliano Garcia
  */
 
 // ================================================
@@ -10,6 +13,9 @@ const CONFIG = {
     // NWS API Configuration
     NWS_STATION: 'KASG', // Springdale, AR
     NWS_API_BASE: 'https://api.weather.gov',
+    
+    // NWS Forecast Page (for additional data reference)
+    NWS_FORECAST_URL: 'https://forecast.weather.gov/MapClick.php?lat=36.06487500000003&lon=-94.16178999999994',
     
     // iDriveArkansas API
     IDRIVE_INCIDENTS_URL: 'https://www.idrivearkansas.com/api/events/geojson',
@@ -109,6 +115,46 @@ function getDewpointClass(dewpoint) {
     return 'dewpoint-miserable';
 }
 
+/**
+ * Convert wind direction degrees to compass direction
+ */
+function degreesToCompass(degrees) {
+    if (degrees === null || degrees === undefined) return '--';
+    const directions = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 
+                       'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+    const index = Math.round(degrees / 22.5) % 16;
+    return directions[index];
+}
+
+/**
+ * Calculate heat index (for temps >= 80°F)
+ */
+function calculateHeatIndex(tempF, humidity) {
+    if (tempF < 80 || humidity === null) return null;
+    
+    const T = tempF;
+    const R = humidity;
+    
+    let HI = -42.379 + 2.04901523 * T + 10.14333127 * R 
+           - 0.22475541 * T * R - 0.00683783 * T * T 
+           - 0.05481717 * R * R + 0.00122874 * T * T * R 
+           + 0.00085282 * T * R * R - 0.00000199 * T * T * R * R;
+    
+    return Math.round(HI);
+}
+
+/**
+ * Calculate wind chill (for temps <= 50°F and wind >= 3 mph)
+ */
+function calculateWindChill(tempF, windMph) {
+    if (tempF > 50 || windMph < 3) return null;
+    
+    const WC = 35.74 + 0.6215 * tempF - 35.75 * Math.pow(windMph, 0.16) 
+             + 0.4275 * tempF * Math.pow(windMph, 0.16);
+    
+    return Math.round(WC);
+}
+
 // ================================================
 // UTC Clock
 // ================================================
@@ -171,15 +217,44 @@ async function getWeather() {
         const dewpointC = props.dewpoint?.value;
         const windSpeedKmh = props.windSpeed?.value;
         const windGustKmh = props.windGust?.value;
+        const windDirection = props.windDirection?.value;
         const humidity = props.relativeHumidity?.value;
+        const visibilityM = props.visibility?.value;
+        const pressurePa = props.barometricPressure?.value;
         const conditions = props.textDescription || 'Unknown';
         
+        // Cloud layers for ceiling
+        const cloudLayers = props.cloudLayers || [];
+        let ceilingFt = null;
+        for (const layer of cloudLayers) {
+            if (layer.amount === 'BKN' || layer.amount === 'OVC') {
+                ceilingFt = layer.base?.value ? Math.round(layer.base.value * 3.28084) : null;
+                break;
+            }
+        }
+        
         // Convert to Fahrenheit and mph
-        const tempF = tempC !== null ? Math.round((tempC * 9/5) + 32) : '--';
-        const dewpointF = dewpointC !== null ? Math.round((dewpointC * 9/5) + 32) : '--';
-        const windMph = windSpeedKmh !== null ? Math.round(windSpeedKmh * 0.621371) : '--';
-        const gustMph = windGustKmh !== null ? Math.round(windGustKmh * 0.621371) : '--';
-        const humidityPct = humidity !== null ? Math.round(humidity) : '--';
+        const tempF = tempC !== null && tempC !== undefined ? Math.round((tempC * 9/5) + 32) : '--';
+        const dewpointF = dewpointC !== null && dewpointC !== undefined ? Math.round((dewpointC * 9/5) + 32) : '--';
+        const windMph = windSpeedKmh !== null && windSpeedKmh !== undefined ? Math.round(windSpeedKmh * 0.621371) : '--';
+        const gustMph = windGustKmh !== null && windGustKmh !== undefined ? Math.round(windGustKmh * 0.621371) : '--';
+        const humidityPct = humidity !== null && humidity !== undefined ? Math.round(humidity) : '--';
+        const visibilityMi = visibilityM !== null && visibilityM !== undefined ? Math.round(visibilityM / 1609.34 * 10) / 10 : '--';
+        const pressureInHg = pressurePa !== null && pressurePa !== undefined ? (pressurePa / 3386.39).toFixed(2) : '--';
+        const windDir = degreesToCompass(windDirection);
+        
+        // Calculate feels like temperature
+        let feelsLike = '';
+        if (typeof tempF === 'number' && typeof humidityPct === 'number') {
+            const heatIndex = calculateHeatIndex(tempF, humidityPct);
+            const windChill = typeof windMph === 'number' ? calculateWindChill(tempF, windMph) : null;
+            
+            if (heatIndex !== null && heatIndex !== tempF) {
+                feelsLike = `Heat Index: ${heatIndex}°F`;
+            } else if (windChill !== null && windChill !== tempF) {
+                feelsLike = `Wind Chill: ${windChill}°F`;
+            }
+        }
         
         // Update DOM
         document.getElementById('wxTemp').textContent = tempF;
@@ -187,11 +262,18 @@ async function getWeather() {
         document.getElementById('wxWind').textContent = `${windMph} mph`;
         document.getElementById('wxGusts').textContent = gustMph !== '--' ? `${gustMph} mph` : 'None';
         document.getElementById('wxHumidity').textContent = `${humidityPct}%`;
+        document.getElementById('wxVisibility').textContent = `${visibilityMi} mi`;
+        document.getElementById('wxPressure').textContent = `${pressureInHg} inHg`;
+        document.getElementById('wxWindDir').textContent = windDir;
+        document.getElementById('wxCeiling').textContent = ceilingFt !== null ? `${ceilingFt} ft` : 'Clear';
+        document.getElementById('wxFeelsLike').textContent = feelsLike;
         
         // Update dewpoint with color coding
         const dewpointEl = document.getElementById('wxDewpoint');
         dewpointEl.textContent = `${dewpointF}°F`;
-        dewpointEl.className = `detail-value ${getDewpointClass(dewpointF)}`;
+        if (typeof dewpointF === 'number') {
+            dewpointEl.className = `detail-value ${getDewpointClass(dewpointF)}`;
+        }
         
         // Update last update time
         state.lastUpdate = new Date();
@@ -199,10 +281,15 @@ async function getWeather() {
         
         // Refresh radar and outlook images (cache busting)
         const timestamp = Date.now();
-        document.getElementById('spcOutlook').src = 
-            `https://www.spc.noaa.gov/products/outlook/day1otlk.gif?t=${timestamp}`;
-        document.getElementById('nwsRadar').src = 
-            `https://radar.weather.gov/ridge/standard/KSRX_0.gif?t=${timestamp}`;
+        const spcOutlook = document.getElementById('spcOutlook');
+        const nwsRadar = document.getElementById('nwsRadar');
+        
+        if (spcOutlook) {
+            spcOutlook.src = `https://www.spc.noaa.gov/products/outlook/day1otlk.gif?t=${timestamp}`;
+        }
+        if (nwsRadar) {
+            nwsRadar.src = `https://radar.weather.gov/ridge/standard/KSRX_0.gif?t=${timestamp}`;
+        }
         
         console.log('Weather updated successfully');
         
@@ -285,11 +372,6 @@ function filterIncidents(incidents) {
         if (state.hideBridges && (type.includes('bridge') || description.includes('bridge'))) {
             return false;
         }
-        
-        // Skip maintenance/construction keywords (optional filter)
-        // for (const keyword of CONFIG.IGNORE_KEYWORDS) {
-        //     if (description.includes(keyword)) return false;
-        // }
         
         return true;
     });
@@ -620,6 +702,7 @@ function initEventListeners() {
  */
 document.addEventListener('DOMContentLoaded', function() {
     console.log('NWA Grid Dashboard initializing...');
+    console.log('Rework of Cameron Wilson\'s airtrak.me Site by Maximiliano Garcia');
     
     // Initialize components
     initEventListeners();
