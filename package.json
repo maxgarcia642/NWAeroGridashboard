@@ -1,0 +1,22 @@
+{
+  "name": "nwa-grid-dashboard",
+  "version": "1.0.0",
+  "description": "Modern single-page dashboard remake of the NWA tracker in vaporwave weather channel style",
+  "main": "index.html",
+  "scripts": {
+    "start": "npx serve -l 3000",
+    "serve": "python3 -m http.server 8000"
+  },
+  "keywords": [
+    "weather",
+    "dashboard",
+    "nwa",
+    "arkansas",
+    "vaporwave",
+    "nws-api",
+    "idrive-arkansas"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {}
+}
